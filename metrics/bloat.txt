@@ -1,0 +1,3 @@
+# Binary Bloat Analysis
+# Format: cargo-bloat output
+# Auto-populated by: just bloat

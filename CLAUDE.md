@@ -30,6 +30,10 @@ just pr             # PR checks with coverage
 # Configuration
 just generate-configs  # Regenerate cliff.toml and .commitlintrc.json
 just check-configs     # Verify configs are in sync
+
+# Binary size tracking (Linux only)
+just record-size    # Record release binary size to metrics/binary-size.txt
+just bloat          # Analyze binary composition with cargo-bloat
 ```
 
 ## Architecture
