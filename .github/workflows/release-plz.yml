@@ -8,144 +8,115 @@ permissions:
   contents: write
 
 jobs:
-  release-plz:
-    name: Release
+  release-plz-release:
+    name: Release-plz release
     runs-on: ubuntu-latest
     concurrency:
-      group: release-plz-${{ github.ref }}
+      group: release-plz-release
       cancel-in-progress: false
-    outputs:
-      pr_number: ${{ steps.release-plz.outputs.pr }}
-      pr_created: ${{ steps.release-plz.outputs.pr != '' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - id: release-plz
-        uses: release-plz/action@a4c8e77e7e4da35ce6fea6fb99079dd94fc45559 # ratchet:release-plz/action@v0.5
+      - uses: release-plz/action@a4c8e77e7e4da35ce6fea6fb99079dd94fc45559 # ratchet:release-plz/action@v0.5
+        with:
+          command: release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-  binary-size:
-    name: Binary Size Tracking
+  release-plz-pr:
+    name: Release-plz PR
     runs-on: ubuntu-latest
-    needs: release-plz
-    if: needs.release-plz.outputs.pr_created == 'true'
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4
         with:
-          ref: release-plz-${{ github.run_id }}
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
-
       - uses: ./.github/actions/setup-rust
 
+      - name: Run release-plz release-pr
+        id: release-plz
+        uses: release-plz/action@a4c8e77e7e4da35ce6fea6fb99079dd94fc45559 # ratchet:release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
       - name: Install tools
+        if: steps.release-plz.outputs.prs_created == 'true'
         uses: taiki-e/install-action@2481b9ef05e94d6d7f1da5e48a1ab1837df998ba # ratchet:taiki-e/install-action@v2
         with:
           tool: cargo-bloat,just
 
-      - name: Build release binary
-        run: cargo build --release
-
-      - name: Get previous size
-        id: prev-size
+      - name: Record binary size metrics
+        id: binary-size
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          PR_HEAD_BRANCH: ${{ fromJson(steps.release-plz.outputs.pr).head_branch }}
         run: |
-          # Get the last recorded size (excluding header lines)
-          PREV_LINE=$(grep -v '^#' metrics/binary-size.txt | grep -v '^$' | tail -1 || echo "")
-          if [ -n "$PREV_LINE" ]; then
-            PREV_SIZE=$(echo "$PREV_LINE" | awk '{print $3}')
-            PREV_HUMAN=$(echo "$PREV_LINE" | awk '{print $4}')
-            echo "size=$PREV_SIZE" >> "$GITHUB_OUTPUT"
-            echo "human=$PREV_HUMAN" >> "$GITHUB_OUTPUT"
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "size=0" >> "$GITHUB_OUTPUT"
-            echo "human=N/A" >> "$GITHUB_OUTPUT"
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Checkout the PR branch
+          git fetch origin "$PR_HEAD_BRANCH"
+          git checkout "$PR_HEAD_BRANCH"
 
-      - name: Record binary size
-        run: just record-size
+          # Get previous size from metrics file
+          PREV_SIZE=$(tail -1 metrics/binary-size.txt | grep -v '^#' | awk '{print $3}' || echo "0")
 
-      - name: Generate bloat report
-        id: bloat
-        run: |
+          cargo build --release
+          SIZE=$(stat --format="%s" target/release/rust-template)
+          HUMAN=$(numfmt --to=iec --suffix=B "$SIZE")
+          DATE=$(date +%Y-%m-%d)
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "$DATE v$VERSION $SIZE $HUMAN" >> metrics/binary-size.txt
+          echo "Recorded binary size: $SIZE ($HUMAN)"
+
+          # Generate bloat reports
           just bloat
+
           # Store bloat content for PR comment (truncated to first 30 lines)
           BLOAT_CONTENT=$(head -30 metrics/bloat.txt)
-          # Use heredoc to handle multiline content
           {
-            echo "content<<EOF"
+            echo "bloat_content<<EOF"
             echo "$BLOAT_CONTENT"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Calculate size diff
-        id: size-diff
-        env:
-          PREV_SIZE: ${{ steps.prev-size.outputs.size }}
-          PREV_EXISTS: ${{ steps.prev-size.outputs.exists }}
-        run: |
-          BINARY="target/release/rust-template"
-          CURRENT_SIZE=$(stat --format="%s" "$BINARY")
-          CURRENT_HUMAN=$(numfmt --to=iec --suffix=B "$CURRENT_SIZE")
-
-          echo "current_size=$CURRENT_SIZE" >> "$GITHUB_OUTPUT"
-          echo "current_human=$CURRENT_HUMAN" >> "$GITHUB_OUTPUT"
-
-          if [ "$PREV_EXISTS" = "true" ] && [ "$PREV_SIZE" -gt 0 ]; then
-            DIFF=$((CURRENT_SIZE - PREV_SIZE))
-            if [ "$DIFF" -ge 0 ]; then
-              DIFF_HUMAN="+$(numfmt --to=iec --suffix=B $DIFF)"
-            else
-              ABS_DIFF=$((DIFF * -1))
-              DIFF_HUMAN="-$(numfmt --to=iec --suffix=B $ABS_DIFF)"
+          # Calculate diff
+          if [ "$PREV_SIZE" != "0" ] && [ -n "$PREV_SIZE" ]; then
+            DIFF=$((SIZE - PREV_SIZE))
+            DIFF_HUMAN=$(numfmt --to=iec --suffix=B -- "$DIFF" | sed 's/^-/-/')
+            PREV_HUMAN=$(numfmt --to=iec --suffix=B "$PREV_SIZE")
+            if [ "$DIFF" -gt 0 ]; then
+              DIFF_HUMAN="+$DIFF_HUMAN"
             fi
-            PERCENT=$(awk "BEGIN {printf \"%.1f\", ($CURRENT_SIZE - $PREV_SIZE) / $PREV_SIZE * 100}")
-            if [ "$(echo "$PERCENT >= 0" | bc)" -eq 1 ]; then
-              PERCENT_STR="+${PERCENT}%"
-            else
-              PERCENT_STR="${PERCENT}%"
+            PERCENT=$(awk "BEGIN {printf \"%.1f\", ($DIFF / $PREV_SIZE) * 100}")
+            if [ "$DIFF" -gt 0 ]; then
+              PERCENT="+$PERCENT"
             fi
-            echo "diff=$DIFF" >> "$GITHUB_OUTPUT"
-            echo "diff_human=$DIFF_HUMAN" >> "$GITHUB_OUTPUT"
-            echo "percent=$PERCENT_STR" >> "$GITHUB_OUTPUT"
-            echo "has_previous=true" >> "$GITHUB_OUTPUT"
+            echo "size=$HUMAN" >> "$GITHUB_OUTPUT"
+            echo "prev_size=$PREV_HUMAN" >> "$GITHUB_OUTPUT"
+            echo "diff=$DIFF_HUMAN" >> "$GITHUB_OUTPUT"
+            echo "diff_bytes=$DIFF" >> "$GITHUB_OUTPUT"
+            echo "percent=$PERCENT%" >> "$GITHUB_OUTPUT"
+            echo "changed=$( [ "$DIFF" -ne 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
           else
-            echo "diff=0" >> "$GITHUB_OUTPUT"
-            echo "diff_human=N/A" >> "$GITHUB_OUTPUT"
+            echo "size=$HUMAN" >> "$GITHUB_OUTPUT"
+            echo "prev_size=N/A" >> "$GITHUB_OUTPUT"
+            echo "diff=N/A" >> "$GITHUB_OUTPUT"
             echo "percent=N/A" >> "$GITHUB_OUTPUT"
-            echo "has_previous=false" >> "$GITHUB_OUTPUT"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Post PR comment
-        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # ratchet:marocchino/sticky-pull-request-comment@v2
-        with:
-          number: ${{ needs.release-plz.outputs.pr_number }}
-          header: binary-size
-          message: |
-            ## Binary Size
-
-            | Metric | Value |
-            |--------|-------|
-            | Current | ${{ steps.size-diff.outputs.current_human }} |
-            | Previous | ${{ steps.prev-size.outputs.human }} |
-            | Change | ${{ steps.size-diff.outputs.diff_human }} (${{ steps.size-diff.outputs.percent }}) |
-
-            <details>
-            <summary>Bloat Analysis (Top 20 functions)</summary>
-
-            ```
-            ${{ steps.bloat.outputs.content }}
-            ```
-
-            </details>
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Commit metrics updates
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          PR_HEAD_BRANCH: ${{ fromJson(steps.release-plz.outputs.pr).head_branch }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -154,5 +125,29 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "chore: update binary size metrics"
-            git push
+            git push origin "$PR_HEAD_BRANCH"
           fi
+
+      - name: Comment on PR with binary size
+        if: steps.release-plz.outputs.prs_created == 'true'
+        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # ratchet:marocchino/sticky-pull-request-comment@v2
+        with:
+          header: binary-size
+          number: ${{ fromJson(steps.release-plz.outputs.pr).number }}
+          message: |
+            ## Binary Size
+
+            | Metric | Value |
+            |--------|-------|
+            | Current | ${{ steps.binary-size.outputs.size }} |
+            | Previous | ${{ steps.binary-size.outputs.prev_size }} |
+            | Change | ${{ steps.binary-size.outputs.diff }} (${{ steps.binary-size.outputs.percent }}) |
+
+            <details>
+            <summary>Bloat Analysis (Top 20 functions)</summary>
+
+            ```
+            ${{ steps.binary-size.outputs.bloat_content }}
+            ```
+
+            </details>
