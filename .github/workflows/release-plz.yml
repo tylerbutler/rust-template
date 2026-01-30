@@ -53,7 +53,7 @@ jobs:
         if: steps.release-plz.outputs.prs_created == 'true'
         uses: taiki-e/install-action@2481b9ef05e94d6d7f1da5e48a1ab1837df998ba # ratchet:taiki-e/install-action@v2
         with:
-          tool: cargo-bloat,just
+          tool: cargo-bloated,just
 
       - name: Record binary size metrics
         id: binary-size

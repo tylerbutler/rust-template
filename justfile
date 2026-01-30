@@ -145,26 +145,13 @@ record-size:
     echo "$DATE v$VERSION $SIZE $HUMAN" >> metrics/binary-size.txt
     echo "Recorded: $DATE v$VERSION $SIZE ($HUMAN)"
 
-# Analyze binary composition with cargo-bloat
+# Analyze binary composition with cargo-bloated
 [linux]
 bloat:
     #!/usr/bin/env bash
     set -euo pipefail
-    BINARY="target/release/rust-template"
-    if [ ! -f "$BINARY" ]; then
-        echo "Release binary not found. Run 'just build-release' first."
-        exit 1
-    fi
     mkdir -p metrics
-    echo "# cargo-bloat analysis - $(date +%Y-%m-%d)" > metrics/bloat.txt
-    echo "# Top 20 functions by size" >> metrics/bloat.txt
-    echo "" >> metrics/bloat.txt
-    cargo bloat --release -n 20 >> metrics/bloat.txt
-    echo "" >> metrics/bloat.txt
-    echo "# Crates by size" >> metrics/bloat.txt
-    echo "" >> metrics/bloat.txt
-    cargo bloat --release --crates >> metrics/bloat.txt
-    cat metrics/bloat.txt
+    cargo bloated --release --output crates | tee metrics/bloat.txt
 
 # ============================================
 # Watch Commands
