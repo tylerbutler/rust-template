@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code when working with this Rust project template.
 
+## Quick Reference
+
+- **Development guide**: [DEV.md](DEV.md) - build commands, testing, CI, release process
+- **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md) - module structure, data flows, design decisions
+
 ## Project Overview
 
 This is a Rust project template with comprehensive CI/CD configuration, featuring:
