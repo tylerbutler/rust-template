@@ -17,9 +17,14 @@ clap-markdown = "0.1"
 thiserror = "2"
 anyhow = "1"
 
+[build-dependencies]
+vergen-gitcl = { version = "1", features = ["build", "cargo", "rustc", "si"] }
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
+proptest = "1"
+rstest = "0.25"
 tempfile = "3"
 
 [profile.release]
