@@ -4,6 +4,7 @@
 
 pub mod cli;
 pub mod errors;
+pub mod version;
 
 /// Returns a greeting message.
 ///

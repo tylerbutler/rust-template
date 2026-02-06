@@ -9,9 +9,11 @@ use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use std::io;
 
+use crate::version::version_string;
+
 /// A Rust project template with comprehensive CI/CD.
 #[derive(Parser, Debug)]
-#[command(name = "rust-template", version, about, long_about = None)]
+#[command(name = "rust-template", version = version_string(), about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
