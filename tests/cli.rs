@@ -1,34 +1,69 @@
 //! CLI integration tests using `assert_cmd`.
 //!
 //! These tests verify CLI behavior by running the compiled binary.
-//! Currently the binary is a simple hello-world; these tests will become
-//! more meaningful once clap is added for argument parsing.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 
 #[test]
-fn runs_successfully() {
+fn no_args_shows_help() {
     cargo_bin_cmd!("rust-template")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Hello"));
+        .stdout(predicate::str::contains("Usage"));
 }
 
 #[test]
-fn help_flag_succeeds() {
-    // Once clap is added, update this to check for usage information
+fn help_flag_shows_usage() {
     cargo_bin_cmd!("rust-template")
         .arg("--help")
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("Usage"))
+        .stdout(predicate::str::contains("greet"));
 }
 
 #[test]
-fn version_flag_succeeds() {
-    // Once clap is added, update this to check for version string
+fn version_flag_shows_version() {
     cargo_bin_cmd!("rust-template")
         .arg("--version")
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn greet_default_name() {
+    cargo_bin_cmd!("rust-template")
+        .arg("greet")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello, World!"));
+}
+
+#[test]
+fn greet_custom_name() {
+    cargo_bin_cmd!("rust-template")
+        .args(["greet", "Rust"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello, Rust!"));
+}
+
+#[test]
+fn completions_bash() {
+    cargo_bin_cmd!("rust-template")
+        .args(["completions", "bash"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("rust-template"));
+}
+
+#[test]
+fn markdown_help_produces_output() {
+    cargo_bin_cmd!("rust-template")
+        .arg("--markdown-help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("# Command-Line Help"));
 }
