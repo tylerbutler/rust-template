@@ -2,6 +2,7 @@
 //!
 //! A Rust project template with comprehensive CI/CD.
 
+pub mod cli;
 pub mod errors;
 
 /// Returns a greeting message.
