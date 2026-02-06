@@ -3,6 +3,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
+permissions:
+  pull-requests: write
+
 jobs:
   # Semver compatibility check with PR comments
   semver:
@@ -24,9 +27,11 @@ jobs:
           echo "sha=$MERGE_BASE" >> "$GITHUB_OUTPUT"
       - name: Check semver compatibility
         id: semver
+        env:
+          MERGE_BASE_SHA: ${{ steps.merge-base.outputs.sha }}
         run: |
           set +e
-          OUTPUT=$(cargo semver-checks --baseline-rev ${{ steps.merge-base.outputs.sha }} --color never 2>&1)
+          OUTPUT=$(cargo semver-checks --baseline-rev "$MERGE_BASE_SHA" --color never 2>&1)
           EXIT_CODE=$?
           echo "$OUTPUT"
           {
@@ -56,4 +61,76 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # ratchet:marocchino/sticky-pull-request-comment@v2
         with:
           header: semver-check
+          delete: true
+
+  # Binary size comparison
+  binary-size:
+    name: Binary Size
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft != true
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4
+
+      - uses: ./.github/actions/setup-rust
+
+      - name: Build PR binary
+        run: cargo build --release
+
+      - name: Get PR binary size
+        id: pr-size
+        run: |
+          SIZE=$(stat --format="%s" target/release/rust-template)
+          echo "bytes=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "PR binary size: $SIZE bytes"
+
+      - name: Download main binary size artifact
+        id: download-main-size
+        uses: dawidd6/action-download-artifact@07ab29fd4a977ae4d2b275957ba2ef66b3bb3cfe # ratchet:dawidd6/action-download-artifact@v8
+        with:
+          workflow: ci.yml
+          branch: main
+          name: binary-size-main
+          path: main-size
+          if_no_artifact_found: warn
+
+      - name: Get main binary size
+        id: main-size
+        run: |
+          if [ -f main-size/binary-size.txt ]; then
+            SIZE=$(cat main-size/binary-size.txt)
+            echo "bytes=$SIZE" >> "$GITHUB_OUTPUT"
+            echo "Main binary size: $SIZE bytes"
+          else
+            echo "::warning::No main binary size artifact found, skipping comparison"
+            echo "bytes=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Calculate size difference
+        id: diff
+        if: steps.main-size.outputs.bytes != '0'
+        env:
+          PR_SIZE: ${{ steps.pr-size.outputs.bytes }}
+          MAIN_SIZE: ${{ steps.main-size.outputs.bytes }}
+        run: python3 scripts/binary-size-diff.py "$PR_SIZE" "$MAIN_SIZE" --github-output "$GITHUB_OUTPUT"
+
+      - name: Comment on PR with size change
+        if: steps.main-size.outputs.bytes != '0' && steps.diff.outputs.significant == 'true'
+        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # ratchet:marocchino/sticky-pull-request-comment@v2
+        with:
+          header: binary-size
+          message: |
+            ## Binary Size Change
+
+            | Metric | Value |
+            |--------|-------|
+            | This PR | ${{ steps.diff.outputs.pr_size }} |
+            | main | ${{ steps.diff.outputs.main_size }} |
+            | Change | ${{ steps.diff.outputs.diff }} (${{ steps.diff.outputs.percent }}) |
+
+      - name: Remove size comment if not significant
+        if: steps.main-size.outputs.bytes != '0' && steps.diff.outputs.significant == 'false'
+        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # ratchet:marocchino/sticky-pull-request-comment@v2
+        with:
+          header: binary-size
           delete: true
