@@ -2,7 +2,7 @@
 name = "rust-template"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 authors = ["Your Name <your.email@example.com>"]
 description = "A Rust project template with comprehensive CI/CD"
 license = "MIT OR Apache-2.0"
@@ -10,9 +10,29 @@ repository = "https://github.com/yourusername/rust-template"
 keywords = ["template", "cli"]
 categories = ["command-line-utilities"]
 
+[features]
+default = ["update-check"]
+update-check = ["dep:tiny-update-check"]
+
 [dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+clap-markdown = "0.1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tiny-update-check = { version = "1", optional = true }
+
+[build-dependencies]
+vergen-gitcl = { version = "1", features = ["build", "cargo", "rustc", "si"] }
 
 [dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+proptest = "1"
+rstest = "0.25"
+tempfile = "3"
 
 [profile.release]
 strip = true
@@ -28,6 +48,10 @@ lto = "thin"
 [profile.profiling]
 inherits = "release"
 debug = true
+
+[profile.bloat]
+inherits = "release"
+panic = "unwind"
 
 [lints.rust]
 unsafe_code = "forbid"

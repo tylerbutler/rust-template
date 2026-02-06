@@ -145,13 +145,14 @@ record-size:
     echo "$DATE v$VERSION $SIZE $HUMAN" >> metrics/binary-size.txt
     echo "Recorded: $DATE v$VERSION $SIZE ($HUMAN)"
 
-# Analyze binary composition with cargo-bloated
+# Analyze binary composition with cargo-bloat
+# Uses separate 'bloat' profile because cargo-bloat requires panic=unwind
 [linux]
 bloat:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p metrics
-    cargo bloated --release --output crates | tee metrics/bloat.txt
+    cargo bloated --profile bloat --bin=rust-template --output crates | tee metrics/bloat.txt
 
 # ============================================
 # Watch Commands

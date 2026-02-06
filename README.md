@@ -14,19 +14,18 @@ A Rust project template with comprehensive CI/CD, security scanning, and release
 ## Quick Start
 
 ```bash
-# Clone the template
+# Create a new repository from this template
 gh repo create my-project --template yourusername/rust-template
 cd my-project
 
-# Install dependencies
-just deps
-
-# Run tests
-just test
+# Initialize with your project details
+./scripts/init-template.sh my-project "Your Name" "your@email.com" "yourgithubusername"
 
 # Run all CI checks locally
 just ci
 ```
+
+See [TEMPLATE_SETUP.md](TEMPLATE_SETUP.md) for detailed customization instructions.
 
 ## Available Commands
 
@@ -65,6 +64,59 @@ rust-template/
 └── ...
 ```
 
+## CI Tiers
+
+This template offers three tiers of CI/CD complexity. Choose based on your project needs:
+
+### Tier 1: Essential
+
+Best for: Personal projects, learning, simple utilities
+
+| Workflow | Purpose |
+|----------|---------|
+| `ci.yml` | Build, test, lint, format, docs |
+| `audit.yml` | Security vulnerability scanning |
+| `dependabot.yml` | Automated dependency updates |
+
+**To use Tier 1 only**, delete these files:
+- `.github/workflows/coverage.yml`
+- `.github/workflows/commit-lint.yml`
+- `.github/workflows/release-plz.yml`
+- `.github/workflows/release.yml`
+- `.github/workflows/build.yml`
+- `.github/workflows/pr.yml`
+- `codecov.yml`, `release-plz.toml`, `dist-workspace.toml`
+
+### Tier 2: Standard
+
+Best for: Libraries, published crates, team projects
+
+Adds to Tier 1:
+| Workflow | Purpose |
+|----------|---------|
+| `coverage.yml` | Code coverage with Codecov |
+| `commit-lint.yml` | Conventional commit enforcement |
+| `release-plz.yml` | Automated versioning and releases |
+
+**To use Tier 2**, delete:
+- `.github/workflows/release.yml`
+- `.github/workflows/build.yml`
+- `.github/workflows/pr.yml`
+- `dist-workspace.toml`
+
+### Tier 3: Comprehensive (Default)
+
+Best for: CLI tools, production binaries, open source projects
+
+Adds to Tier 2:
+| Workflow | Purpose |
+|----------|---------|
+| `release.yml` | Binary distribution via cargo-dist |
+| `build.yml` | Multi-platform builds |
+| `pr.yml` | PR validation with binary size tracking |
+
+Includes supply chain security: SBOM, attestations, cargo-auditable.
+
 ## Configuration
 
 ### Secrets Required
@@ -77,10 +129,18 @@ rust-template/
 
 ### Customization
 
-1. Update `Cargo.toml` with your project details
-2. Update `commit-types.json` to customize commit types
-3. Run `just generate-configs` to regenerate derived configs
-4. Configure GitHub repository secrets
+**Automated** (recommended):
+```bash
+./scripts/init-template.sh my-project "Your Name" "you@example.com" "githubuser"
+```
+
+**Manual**: See [TEMPLATE_SETUP.md](TEMPLATE_SETUP.md) for the complete list of files to update.
+
+After customization:
+1. Choose your CI tier and remove unwanted workflows
+2. Run `just generate-configs` to regenerate derived configs
+3. Configure GitHub repository secrets
+4. Run `just ci` to verify everything works
 
 ## License
 
