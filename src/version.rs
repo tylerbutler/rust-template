@@ -30,6 +30,7 @@ static VERSION: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// Returns the version string for use in CLI output.
+#[must_use]
 pub fn version_string() -> &'static str {
     &VERSION
 }
