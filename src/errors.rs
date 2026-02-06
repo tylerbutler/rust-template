@@ -13,6 +13,7 @@ use thiserror::Error;
 /// - **`Config`**: Simple string message for descriptive errors
 /// - **`NotFound`**: Structured fields for machine-readable error context
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AppError {
     /// An I/O operation failed.
     #[error("I/O error: {0}")]
