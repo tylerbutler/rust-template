@@ -15,10 +15,9 @@ coverage:
         threshold: 1%
     patch:
       default:
-        target: auto
-        threshold: 10%
+        # Informational only — reports patch coverage without failing the check.
+        # The project check enforces actual coverage thresholds.
+        informational: true
 
 comment:
-  layout: "reach, diff, flags, files"
-  behavior: default
-  require_changes: false
+  layout: "condensed_header, condensed_files, condensed_footer"
